@@ -88,6 +88,17 @@ python -m venv .venv
 - 관리자 권한 상승과 실행 창 유지는 내부적으로 `refresh_data_launcher.ps1`가 처리합니다.
 - 실제 데이터 갱신 로직은 `refresh_data.ps1`가 처리합니다.
 
+### 데이터 갱신 없이 서버만 다시 시작하고 싶을 때
+
+관리자 PowerShell에서:
+
+```powershell
+Restart-Service MyRagMcpServer
+```
+
+일반적인 코드/인증 변경 반영은 이 명령으로 충분합니다.
+`Caddyfile`을 바꾼 경우에만 `MyRagCaddy`까지 다시 시작하면 됩니다.
+
 ### 서비스 로그 경로를 다시 맞추고 싶을 때
 
 관리자 PowerShell에서:
