@@ -183,7 +183,13 @@ class LocalOAuthProvider(
         refresh_token: str,
     ) -> RefreshToken | None:
         token = self.refresh_tokens.get(refresh_token)
-        if token and token.client_id == client.client_id:
+        if token is None:
+            return None
+        if token.expires_at and token.expires_at < int(time.time()):
+            self.refresh_tokens.pop(refresh_token, None)
+            self._persist_state()
+            return None
+        if token.client_id == client.client_id:
             return token
         return None
 
