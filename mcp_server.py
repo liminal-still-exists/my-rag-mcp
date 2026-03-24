@@ -284,10 +284,16 @@ def patch_mcp_oauth_compat() -> None:
                     str(authorize_request_redirect_uri) if authorize_request_redirect_uri is not None else None
                 )
 
-                if token_redirect_str is not None and auth_redirect_str is not None and token_redirect_str != auth_redirect_str:
-                    print(
-                        "Token redirect_uri mismatch tolerated:",
-                        {"token": token_redirect_str, "auth": auth_redirect_str},
+                if (
+                    token_redirect_str is not None
+                    and auth_redirect_str is not None
+                    and token_redirect_str != auth_redirect_str
+                ):
+                    return self.response(
+                        token_module.TokenErrorResponse(
+                            error="invalid_grant",
+                            error_description="redirect_uri does not match authorization request",
+                        )
                     )
 
                 sha256 = hashlib.sha256(token_request.code_verifier.encode()).digest()
