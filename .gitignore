@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+.cache/
+
+notion workspace/
+notion_chroma_db/
+
+*.pyc
+*.pyo
+
+*.pid
+*.log
+ops/*.local.xml
+runtime/oauth_state.json
+caddy.exe
+
+.env
+.env.*
+!.env.example
