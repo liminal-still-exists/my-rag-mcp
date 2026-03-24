@@ -114,6 +114,13 @@ def normalize_text(value: str) -> str:
     return " ".join(str(value).split()).strip().lower()
 
 
+def safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def tokenize(text: str) -> list[str]:
     return TOKEN_PATTERN.findall(normalize_text(text))
 
@@ -254,7 +261,7 @@ class NotionStore:
             if meta.get("date", "") != date_token:
                 return False
 
-        depth = int(meta.get("depth", 0) or 0)
+        depth = safe_int(meta.get("depth", 0), default=0)
         if min_depth is not None and depth < min_depth:
             return False
         if max_depth is not None and depth > max_depth:
@@ -301,7 +308,7 @@ class NotionStore:
         def sort_key(record: NotionRecord):
             value = record.metadata.get(sort_field, "")
             if sort_field == "depth":
-                return int(value or 0)
+                return safe_int(value, default=0)
             return str(value or "")
 
         records.sort(key=sort_key, reverse=reverse)
