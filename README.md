@@ -57,6 +57,13 @@ python -m venv .venv
 
 서비스 실행과 로컬 실행은 모두 같은 `.env`를 읽습니다.
 
+임베딩 CPU 사용 강도를 조절하고 싶으면 `.env`에 아래 값을 넣을 수 있습니다.
+
+- `EMBED_CPU_MODE=fast`
+  - 임베딩 속도 우선
+- `EMBED_CPU_MODE=balanced`
+  - 다른 작업과 같이 쓰기 쉬운 쪽으로 CPU 사용량 완화
+
 ### 4. Notion export 넣기
 
 `notion workspace/` 폴더 안에 Notion Markdown export 파일들을 넣습니다.

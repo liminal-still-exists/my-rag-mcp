@@ -16,12 +16,9 @@ BASE_DIR = Path(__file__).resolve().parent
 FOLDER = BASE_DIR / "notion workspace"
 DB_PATH = BASE_DIR / "notion_chroma_db"
 CACHE_DIR = BASE_DIR / ".cache"
+ENV_PATH = BASE_DIR / ".env"
 MAX_CHARS = 800
 CPU_COUNT = os.cpu_count() or 1
-TORCH_NUM_THREADS = max(1, CPU_COUNT - 1)
-TORCH_NUM_INTEROP_THREADS = max(1, min(4, CPU_COUNT // 2))
-UPSERT_BATCH_SIZE = 128
-ENCODE_BATCH_SIZE = 64
 HEADING_PATTERN = re.compile(r"(?m)^(#{1,3})\s+(.+?)\s*$")
 DATE_HEADING_PATTERN = re.compile(r"^\d{6}$")
 NOTION_EXPORT_SUFFIX_PATTERN = re.compile(
@@ -46,6 +43,20 @@ os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 os.environ.setdefault("DISABLE_TELEMETRY", "1")
 
+def load_local_env() -> None:
+    if not ENV_PATH.exists():
+        return
+
+    for raw_line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(name, value)
+
+
 def disable_safetensors_auto_conversion():
     def _disabled_auto_conversion(*args, **kwargs):
         return None, None, False
@@ -53,7 +64,21 @@ def disable_safetensors_auto_conversion():
     safetensors_conversion.auto_conversion = _disabled_auto_conversion
     modeling_utils.auto_conversion = _disabled_auto_conversion
 
+load_local_env()
 disable_safetensors_auto_conversion()
+
+EMBED_CPU_MODE = os.environ.get("EMBED_CPU_MODE", "fast").strip().lower()
+if EMBED_CPU_MODE == "balanced":
+    TORCH_NUM_THREADS = max(1, CPU_COUNT // 2)
+    TORCH_NUM_INTEROP_THREADS = max(1, min(2, CPU_COUNT // 4 or 1))
+    UPSERT_BATCH_SIZE = 64
+    ENCODE_BATCH_SIZE = 32
+else:
+    EMBED_CPU_MODE = "fast"
+    TORCH_NUM_THREADS = max(1, CPU_COUNT - 1)
+    TORCH_NUM_INTEROP_THREADS = max(1, min(4, CPU_COUNT // 2))
+    UPSERT_BATCH_SIZE = 128
+    ENCODE_BATCH_SIZE = 64
 
 torch.set_num_threads(TORCH_NUM_THREADS)
 torch.set_num_interop_threads(TORCH_NUM_INTEROP_THREADS)
@@ -257,7 +282,7 @@ def run_embedding():
     page_hierarchy = load_page_hierarchy()
     md_files = [f for f in os.listdir(FOLDER) if f.endswith(".md")]
     print(
-        f"CPU 스레드 설정: intra_op={TORCH_NUM_THREADS}, inter_op={TORCH_NUM_INTEROP_THREADS}, "
+        f"CPU 모드: {EMBED_CPU_MODE}, intra_op={TORCH_NUM_THREADS}, inter_op={TORCH_NUM_INTEROP_THREADS}, "
         f"encode_batch={ENCODE_BATCH_SIZE}, upsert_batch={UPSERT_BATCH_SIZE}"
     )
     print(f"총 {len(md_files)}개 파일 발견")
