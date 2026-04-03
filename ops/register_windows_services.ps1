@@ -61,8 +61,11 @@ Ensure-Admin
 New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
 $nssm = Find-NssmPath
 
-schtasks /End /TN $taskName 2>$null | Out-Null
-schtasks /Change /TN $taskName /DISABLE 2>$null | Out-Null
+cmd /c "schtasks /Query /TN $taskName >nul 2>&1"
+if ($LASTEXITCODE -eq 0) {
+    schtasks /End /TN $taskName | Out-Null
+    schtasks /Change /TN $taskName /DISABLE | Out-Null
+}
 
 Remove-ServiceIfExists -Name "MyRagMcpServer"
 Remove-ServiceIfExists -Name "MyRagCaddy"
