@@ -16,19 +16,12 @@ function Ensure-Admin {
 }
 
 function Find-NssmPath {
-    $command = Get-Command nssm.exe -ErrorAction SilentlyContinue
-    if ($command) {
-        return $command.Source
+    $localNssm = Join-Path $projectRoot "bin\nssm.exe"
+    if (Test-Path -LiteralPath $localNssm) {
+        return $localNssm
     }
 
-    $candidate = Get-ChildItem "C:\Users\*\AppData\Local\Microsoft\WinGet\Packages" -Filter nssm.exe -Recurse -ErrorAction SilentlyContinue |
-        Select-Object -ExpandProperty FullName -First 1
-
-    if ($candidate) {
-        return $candidate
-    }
-
-    throw "nssm.exe를 찾을 수 없습니다. WinGet 또는 PATH를 확인해 주세요."
+    throw "bin\nssm.exe를 찾을 수 없습니다. 프로젝트 로컬 NSSM 바이너리를 확인해 주세요."
 }
 
 function Remove-ServiceIfExists {
@@ -56,6 +49,11 @@ function Install-NssmService {
     & $nssm set $Name AppStderr (Join-Path $logsDir "$Name.err.log") | Out-Null
     & $nssm set $Name AppRotateFiles 1 | Out-Null
     & $nssm set $Name AppRotateOnline 1 | Out-Null
+
+    sc.exe config $Name start= delayed-auto | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Name 서비스의 시작 유형을 자동(지연된 시작)으로 설정하지 못했습니다."
+    }
 }
 
 Ensure-Admin

@@ -111,8 +111,10 @@ Restart-Service MyRagMcpServer
 관리자 PowerShell에서:
 
 ```powershell
-.\ops\install_nssm_services.ps1
+.\ops\register_windows_services.ps1
 ```
+
+이 스크립트를 실행하려면 프로젝트 루트의 `bin/nssm.exe`가 준비되어 있어야 합니다.
 
 이 스크립트는:
 
@@ -127,7 +129,7 @@ Restart-Service MyRagMcpServer
 관리자 PowerShell에서:
 
 ```powershell
-.\ops\install_log_cleanup_task.ps1
+.\ops\register_log_cleanup_task.ps1
 ```
 
 이 작업은 매일 로그를 정리합니다.
@@ -265,7 +267,7 @@ Get-Service MyRagMcpServer,MyRagCaddy
 관리자 PowerShell에서:
 
 ```powershell
-.\ops\install_nssm_services.ps1
+.\ops\register_windows_services.ps1
 ```
 
 현재 실행 중인 서비스가 붙잡고 있는 활성 로그 파일은 재등록 전까지 루트에 남아 있을 수 있습니다.
@@ -275,7 +277,7 @@ Get-Service MyRagMcpServer,MyRagCaddy
 자동 정리 작업을 다시 등록합니다.
 
 ```powershell
-.\ops\install_log_cleanup_task.ps1
+.\ops\register_log_cleanup_task.ps1
 ```
 
 ## 로그 관리
