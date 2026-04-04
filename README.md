@@ -1,39 +1,47 @@
 # my-rag-mcp
 
-Notion Markdown export를 로컬 ChromaDB에 임베딩한 뒤, 이를 원격 MCP 서버로 제공하는 프로젝트입니다.
+## 프로젝트 개요
+> 윈도우 환경에서 Notion 워크스페이스 내보내기 파일들을 청크로 분할해 임베딩 기반 벡터 검색과 BM25가 가능한 형태로 로컬 ChromaDB에 저장하고, 리랭커를 포함한 하이브리드 검색을 원격 MCP 서버로 제공한다.
 
-이 문서는 "처음 설치할 때 무엇을 해야 하는지", "평소에는 무엇만 하면 되는지", "문제가 생기면 무엇부터 보면 되는지" 기준으로 정리합니다.
+## 자주 쓰는 명령
 
-## 30초 요약
-
-주인님이 평소에 기억할 것은 거의 이것 하나입니다.
+### 데이터 다시 반영
 
 ```powershell
 .\refresh_data.cmd
 ```
 
-이 명령은:
+원본 데이터 신규 등록/변경 시에 실행하는 기본 명령이다. 청크 재생성, 임베딩 재계산, ChromaDB 갱신, 오래된 Chroma 세그먼트 정리, MCP 서버 재시작까지 한 번에 처리한다.
 
-1. Notion 데이터를 다시 임베딩하고
-2. ChromaDB를 다시 만들고
-3. 오래된 Chroma 찌꺼기 폴더를 정리하고
-4. MCP 서버 서비스를 재시작합니다
+실행 중 오류가 발생하면 즉시 중단하며, 실행 창에 오류 내용을 남긴다.
 
-즉, **Notion 데이터가 바뀌면 이것만 실행하면 됩니다.**
+### 서버만 다시 시작
 
-## 이 프로젝트가 하는 일
+```powershell
+Restart-Service MyRagMcpServer
+```
 
-이 프로젝트는 크게 3단계로 동작합니다.
+코드 변경이나 인증 설정 변경만 반영할 때 사용한다. `Caddyfile`까지 변경한 경우에는 `MyRagCaddy`도 다시 시작한다.
 
-1. `notion workspace/` 안의 Notion Markdown export를 읽습니다.
-2. 내용을 청크로 나누고 임베딩해서 `notion_chroma_db/`에 저장합니다.
-3. 그 데이터를 MCP 서버를 통해 외부 클라이언트가 질의할 수 있게 합니다.
+### Windows 서비스 재등록
 
-외부에서는 HTTPS로 접근하고, 내부에서는 Python MCP 서버와 Caddy가 함께 동작합니다.
+```powershell
+.\ops\register_windows_services.ps1
+```
 
-## 처음 설치할 때
+로그 경로 재설정, 서비스 재등록, 시작 유형 재설정이 필요할 때 사용한다. 실행 전제는 `bin/nssm.exe` 존재다.
 
-### 1. Python 가상환경 만들기
+### 로그 정리 작업 재등록
+
+```powershell
+.\ops\register_log_cleanup_task.ps1
+```
+
+로그 자동 정리 작업 스케줄러를 다시 등록할 때 사용한다.
+
+## 초기 설치
+
+### 1. 가상환경 생성
 
 ```powershell
 python -m venv .venv
@@ -45,30 +53,26 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
-### 3. 환경 설정 파일 준비
+### 3. 환경 변수 파일 준비
 
-`.env.example`를 참고해서 루트에 `.env` 파일을 준비합니다.
+프로젝트 루트에 `.env` 파일을 둔다. 기본 형식은 `.env.example`을 기준으로 맞춘다.
 
-최소한 아래 값들은 실제 운영값으로 채워야 합니다.
+필수 값은 아래와 같다.
 
 - `MCP_PUBLIC_BASE_URL`
 - `MCP_PUBLIC_HOST`
 - `MCP_OAUTH_APPROVAL_SECRET`
 
-서비스 실행과 로컬 실행은 모두 같은 `.env`를 읽습니다.
-
-임베딩 CPU 사용 강도를 조절하고 싶으면 `.env`에 아래 값을 넣을 수 있습니다.
+임베딩 CPU 사용 강도는 아래 값으로 조절할 수 있다.
 
 - `EMBED_CPU_MODE=fast`
-  - 임베딩 속도 우선
 - `EMBED_CPU_MODE=balanced`
-  - 다른 작업과 같이 쓰기 쉬운 쪽으로 CPU 사용량 완화
 
-### 4. Notion export 넣기
+`fast`는 임베딩 속도 우선 모드다. `balanced`는 다른 작업과 함께 사용할 때 CPU 사용량을 완화하는 모드다.
 
-`notion workspace/` 폴더 안에 Notion Markdown export 파일들을 넣습니다.
+### 4. Notion 내보내기 데이터 배치
 
-이 폴더가 임베딩 대상 원본입니다.
+Notion에서 내보낸 압축파일의 압축을 해제한 뒤에 폴더의 내용물을 `notion workspace/` 폴더에 넣는다.
 
 ### 5. 최초 데이터 생성
 
@@ -76,219 +80,133 @@ python -m venv .venv
 .\refresh_data.cmd
 ```
 
-이 단계까지 끝나면 데이터가 생성되고, 서버가 새 데이터를 읽을 수 있는 상태가 됩니다.
+최초 실행이 끝나면 ChromaDB가 생성되고 서비스가 새 데이터를 읽을 수 있는 상태가 된다.
 
-## 평소 운영
+## 운영 기준
 
-### 데이터가 바뀌었을 때
+### 서비스 구성
 
-```powershell
-.\refresh_data.cmd
-```
+- `MyRagMcpServer`: Python MCP 서버
+- `MyRagCaddy`: 외부 HTTPS 진입용 Caddy
 
-이게 평소 운영에서 가장 중요한 명령입니다.
+두 서비스는 재등록 시 `자동(지연된 시작)` 기준으로 설정한다.
 
-주의:
+### 서비스 재등록 스크립트가 하는 일
 
-- `refresh_data.cmd`를 더블클릭하면 관리자 권한을 요청한 뒤 실행됩니다.
-- `refresh_data.cmd`는 더블클릭용 진입점입니다.
-- 관리자 권한 상승과 실행 창 유지는 내부적으로 `refresh_data_launcher.ps1`가 처리합니다.
-- 실제 데이터 갱신 로직은 `refresh_data.ps1`가 처리합니다.
-
-### 데이터 갱신 없이 서버만 다시 시작하고 싶을 때
-
-관리자 PowerShell에서:
-
-```powershell
-Restart-Service MyRagMcpServer
-```
-
-일반적인 코드/인증 변경 반영은 이 명령으로 충분합니다.
-`Caddyfile`을 바꾼 경우에만 `MyRagCaddy`까지 다시 시작하면 됩니다.
-
-### 서비스 로그 경로를 다시 맞추고 싶을 때
-
-관리자 PowerShell에서:
-
-```powershell
-.\ops\register_windows_services.ps1
-```
-
-이 스크립트를 실행하려면 프로젝트 루트의 `bin/nssm.exe`가 준비되어 있어야 합니다.
-
-이 스크립트는:
+`ops/register_windows_services.ps1`는 아래 항목을 맞춘다.
 
 - MCP 서버 서비스 재등록
 - Caddy 서비스 재등록
-- 로그 경로를 `logs/`로 정리
+- 서비스 로그 경로를 `logs/`로 설정
+- 서비스 시작 유형을 `자동(지연된 시작)`으로 설정
 
-를 처리합니다.
+### 로그 정리 기준
 
-### 로그 자동 정리 작업을 다시 등록하고 싶을 때
+- 서비스 로그 저장 위치: `logs/`
+- 회전 로그 정리 스크립트: `ops/cleanup_logs.ps1`
+- 자동 정리 작업 등록 스크립트: `ops/register_log_cleanup_task.ps1`
 
-관리자 PowerShell에서:
+## 데이터 갱신 흐름
 
-```powershell
-.\ops\register_log_cleanup_task.ps1
-```
+`refresh_data.cmd` 실행 시 `refresh_data_launcher.ps1`가 관리자 권한 상승과 실행 창 유지를 처리한다. 실제 데이터 갱신은 `refresh_data.ps1`가 담당한다.
 
-이 작업은 매일 로그를 정리합니다.
-설정한 시각에 컴퓨터가 꺼져 있어도, 켜진 뒤 가능한 시점에 실행되도록 등록합니다.
+`embed.py`는 아래 순서로 동작한다.
 
-## 로컬에서 직접 실행하고 싶을 때
+1. `notion workspace/` 안의 파일을 읽는다.
+2. 문서를 청크로 분할한다.
+3. 임베딩을 계산해 `notion_chroma_db/`에 저장한다.
+4. 현재 DB에서 참조하지 않는 오래된 UUID 폴더를 정리한다.
 
-서비스 대신 직접 띄우려면:
+마지막 단계에서 `refresh_data.ps1`가 MCP 서버 서비스를 재시작한다.
+
+## 로컬 실행
+
+서비스 대신 직접 실행하려면 아래 명령을 사용한다.
 
 ```powershell
 .\start_all.ps1
 ```
 
-이 스크립트는 MCP 서버와 Caddy를 같은 로컬 환경에서 함께 실행합니다.
+이 방식은 MCP 서버와 Caddy를 같은 로컬 환경에서 함께 띄울 때 사용한다.
 
-즉:
+## 문제 발생 시 확인
 
-- 평소 운영: 서비스 기반
-- 수동 확인/개발 실행: `start_all.ps1`
-
-로 보면 됩니다.
-
-## 폴더 구조
-
-### 루트 주요 파일
-
-- `embed.py`
-  - Notion Markdown를 읽고 ChromaDB를 다시 만듭니다.
-  - 임베딩이 끝난 뒤 현재 DB에서 참조하지 않는 오래된 Chroma 세그먼트 폴더를 삭제합니다.
-- `mcp_server.py`
-  - MCP 서버 본체입니다.
-  - OAuth 보호, 원격 접속용 메타데이터 응답, MCP 엔드포인트를 담당합니다.
-- `notion_store.py`
-  - ChromaDB 조회, BM25, 하이브리드 검색, reranker를 담당합니다.
-- `oauth_provider.py`
-  - OAuth 승인, 토큰 발급, 동적 클라이언트 등록을 담당합니다.
-- `run_server.ps1`
-  - `.env`를 읽어 MCP 서버를 실행하는 스크립트입니다.
-- `run_caddy.ps1`
-  - `.env`를 읽어 Caddy를 실행하는 스크립트입니다.
-- `start_all.ps1`
-  - 로컬에서 MCP 서버와 Caddy를 함께 띄웁니다.
-- `load_local_env.ps1`
-  - `.env`를 PowerShell 환경변수로 불러오는 공용 로더입니다.
-- `refresh_data.ps1`
-  - 데이터 갱신용 진입점입니다.
-- `refresh_data_launcher.ps1`
-  - `refresh_data.cmd`에서 호출하는 관리자 실행용 런처입니다.
-- `refresh_data.cmd`
-  - 더블클릭으로 데이터 갱신을 시작하는 진입점입니다.
-- `Caddyfile`
-  - 외부 HTTPS 요청을 내부 MCP 서버로 reverse proxy 합니다.
-
-### 폴더별 역할
-
-- `ops/`
-  - 서비스 설치, 작업 스케줄러, 로그 청소 같은 운영 스크립트
-- `logs/`
-  - 서비스 로그와 시작 로그
-- `runtime/`
-  - PID 파일
-- `bin/`
-  - 실행 바이너리
-- `notion workspace/`
-  - Notion export 원본
-- `notion_chroma_db/`
-  - ChromaDB 저장소
-- `.venv/`
-  - 프로젝트 내부 가상환경
-
-## 데이터 갱신이 내부적으로 하는 일
-
-`refresh_data.cmd`를 실행하면 내부적으로 `refresh_data_launcher.ps1`가 호출됩니다.
-
-그 다음 `refresh_data_launcher.ps1`가 관리자 권한을 올리고 `refresh_data.ps1`를 실행합니다.
-
-그 안에서 `embed.py`가 돌아갑니다.
-
-`embed.py`는 다음 순서로 동작합니다.
-
-1. `notion workspace/` 안의 Markdown 파일을 읽습니다.
-2. 헤딩 구조를 기준으로 청크를 만듭니다.
-3. 임베딩을 계산해 `notion_chroma_db/`에 저장합니다.
-4. 현재 DB에서 참조하지 않는 오래된 UUID 폴더를 정리합니다.
-
-그 후 `refresh_data.ps1`가 MCP 서버 서비스를 재시작해서 새 데이터를 다시 읽게 합니다.
-
-## 원격 접속 주소
-
-원격 MCP 주소는 배포 환경의 공개 도메인과 MCP 경로를 합친 값입니다.
-
-형식:
-
-```text
-https://<public-domain>/myrag
-```
-
-실제 도메인은 환경에 맞게 설정해서 사용합니다.
-
-## OAuth 메모
-
-이 프로젝트는 OAuth 보호된 MCP 서버입니다.
-
-대략적인 흐름은 이렇습니다.
-
-1. 클라이언트가 등록됩니다.
-2. 승인 페이지로 이동합니다.
-3. 승인 후 토큰이 발급됩니다.
-4. 이후 `/myrag` 엔드포인트에 접근합니다.
-
-구현 세부사항은 `mcp_server.py`, `oauth_provider.py`에서 처리합니다.
-
-## 문제 생겼을 때 먼저 볼 것
-
-### 1. Claude 연결이 안 될 때
-
-먼저 서비스가 살아 있는지 확인합니다.
+### Claude 연결 실패
 
 ```powershell
 Get-Service MyRagMcpServer,MyRagCaddy
 ```
 
-둘 다 `Running`이어야 합니다.
+두 서비스가 모두 `Running` 상태인지 먼저 확인한다.
 
-### 2. 데이터가 반영되지 않는 것 같을 때
-
-먼저 이것부터 다시 실행합니다.
+### 데이터 반영 실패 의심
 
 ```powershell
 .\refresh_data.cmd
 ```
 
-### 3. 로그가 루트에 남아 있을 때
+데이터 반영 문제는 이 명령으로 먼저 다시 확인한다.
 
-관리자 PowerShell에서:
+### 로그가 루트에 남는 경우
 
 ```powershell
 .\ops\register_windows_services.ps1
 ```
 
-현재 실행 중인 서비스가 붙잡고 있는 활성 로그 파일은 재등록 전까지 루트에 남아 있을 수 있습니다.
+실행 중인 서비스가 점유한 활성 로그 파일은 재등록 전까지 루트에 남을 수 있다.
 
-### 4. 로그가 너무 많이 쌓일 때
-
-자동 정리 작업을 다시 등록합니다.
+### 로그 과다 누적
 
 ```powershell
 .\ops\register_log_cleanup_task.ps1
 ```
 
-## 로그 관리
+자동 정리 작업을 다시 등록한다.
 
-로그는 소모품입니다.
-오래된 로그는 운영상 꼭 보관할 필요가 없고, 최근 것만 조금 남아 있으면 충분합니다.
+## 주요 파일과 디렉터리
 
-현재 구조는 다음과 같습니다.
+### 루트 주요 파일
 
-- 서비스 로그는 `logs/`에 쌓이도록 정리 중
-- 회전 로그는 `.\ops\cleanup_logs.ps1`로 정리
-- 자동 정리는 작업 스케줄러가 담당
+- `embed.py`: Notion 파일 청크 분할, 임베딩 및 ChromaDB 재생성
+- `mcp_server.py`: MCP 서버 본체
+- `notion_store.py`: ChromaDB 조회, BM25, 하이브리드 검색, reranker
+- `oauth_provider.py`: OAuth 승인, 토큰 발급, 동적 클라이언트 등록
+- `load_local_env.ps1`: `.env`를 PowerShell 환경변수로 불러오는 공용 로더
+- `run_server.ps1`: `.env`를 읽어 MCP 서버 실행
+- `run_caddy.ps1`: `.env`를 읽어 Caddy 실행
+- `start_all.ps1`: MCP 서버와 Caddy 동시 실행
+- `refresh_data.ps1`: 데이터 갱신 진입점
+- `refresh_data_launcher.ps1`: 관리자 권한 상승 및 실행 창 유지
+- `refresh_data.cmd`: 더블클릭용 데이터 갱신 진입점
+- `Caddyfile`: 외부 HTTPS 요청을 내부 MCP 서버로 reverse proxy
 
-`cleanup_logs.ps1`는 로그 패턴별로 최근 10개만 남기고 오래된 로그를 삭제합니다.
+### 주요 디렉터리
+
+- `ops/`: 운영 스크립트
+- `logs/`: 서비스 로그
+- `runtime/`: 런타임 상태 파일과 OAuth 상태 파일
+- `bin/`: 실행 바이너리
+- `notion workspace/`: Notion 워크스페이스 내보내기 파일 원본
+- `notion_chroma_db/`: ChromaDB 저장소
+- `.venv/`: 프로젝트 내부 가상환경
+
+## 원격 주소
+
+원격 MCP 주소 형식은 아래와 같다.
+
+```text
+https://<public-domain>/myrag
+```
+
+실제 도메인은 배포 환경에 맞게 설정한다.
+
+## OAuth
+
+이 프로젝트는 OAuth 보호형 MCP 서버다.
+
+기본 흐름은 아래와 같다.
+
+1. 클라이언트를 등록한다.
+2. 승인 페이지로 이동한다.
+3. 승인 후 토큰을 발급한다.
+4. 이후 `/myrag` 엔드포인트에 접근한다.
