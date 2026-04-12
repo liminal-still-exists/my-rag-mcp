@@ -7,8 +7,6 @@ $legacyRoot = $projectRoot
 $keepPerPattern = 10
 
 $patternGroups = @(
-    "MyRagCaddy.err-*.log",
-    "MyRagCaddy.out-*.log",
     "MyRagMcpServer.err-*.log",
     "MyRagMcpServer.out-*.log"
 )

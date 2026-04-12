@@ -3,7 +3,6 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptDir
 $serverScript = Join-Path $projectRoot "run_server.ps1"
-$caddyScript = Join-Path $projectRoot "run_caddy.ps1"
 $logsDir = Join-Path $projectRoot "logs"
 $taskName = "\my_rag_mcp"
 
@@ -68,13 +67,9 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 Remove-ServiceIfExists -Name "MyRagMcpServer"
-Remove-ServiceIfExists -Name "MyRagCaddy"
 
 Install-NssmService -Name "MyRagMcpServer" -DisplayName "My RAG MCP Server" -ScriptPath $serverScript
-Install-NssmService -Name "MyRagCaddy" -DisplayName "My RAG Caddy" -ScriptPath $caddyScript
 
 & $nssm start MyRagMcpServer | Out-Null
-Start-Sleep -Seconds 2
-& $nssm start MyRagCaddy | Out-Null
 
-Get-Service MyRagMcpServer,MyRagCaddy | Select-Object Name,Status,StartType
+Get-Service MyRagMcpServer | Select-Object Name,Status,StartType

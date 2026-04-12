@@ -7,9 +7,7 @@ Import-ProjectEnv
 $runtimeDir = Join-Path $scriptDir "runtime"
 $logsDir = Join-Path $scriptDir "logs"
 $serverPidFile = Join-Path $runtimeDir "mcp_server.pid"
-$caddyPidFile = Join-Path $runtimeDir "caddy.pid"
 $serverLogFile = Join-Path $logsDir "mcp_server_start.log"
-$caddyLogFile = Join-Path $logsDir "caddy_start.log"
 
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
@@ -71,57 +69,27 @@ function Stop-RecordedProcess {
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
 }
 
-$serverPortsInUse = Get-ListeningProcessId -Ports @(18000)
-$caddyPortsInUse = Get-ListeningProcessId -Ports @(2019, 443)
+$serverPort = if ($env:MCP_PORT) { [int]$env:MCP_PORT } else { 18444 }
+$serverPortsInUse = Get-ListeningProcessId -Ports @($serverPort)
 
-if ($serverPortsInUse.Count -gt 0 -or $caddyPortsInUse.Count -gt 0) {
-    if ($serverPortsInUse.Count -gt 0) {
-        Open-MonitorWindow -Title "mcp_server" -Message "mcp_server가 이미 실행 중입니다. 새로 띄우지 않고 로그만 표시합니다." -LogFile $serverLogFile
-    }
-    if ($caddyPortsInUse.Count -gt 0) {
-        Open-MonitorWindow -Title "caddy" -Message "caddy가 이미 실행 중입니다. 새로 띄우지 않고 로그만 표시합니다." -LogFile $caddyLogFile
-    }
+if ($serverPortsInUse.Count -gt 0) {
+    Open-MonitorWindow -Title "mcp_server" -Message "mcp_server가 이미 실행 중입니다. 새로 띄우지 않고 로그만 표시합니다." -LogFile $serverLogFile
     return
 }
 
 Stop-RecordedProcess -PidFile $serverPidFile
-Stop-RecordedProcess -PidFile $caddyPidFile
 
-Remove-Item $serverLogFile,$caddyLogFile -Force -ErrorAction SilentlyContinue
+Remove-Item $serverLogFile -Force -ErrorAction SilentlyContinue
 
 $serverCommand = @"
 Set-Location '$scriptDir'
 `$Host.UI.RawUI.WindowTitle = 'mcp_server'
 . '$envLoader'
 Import-ProjectEnv
-if (-not `$env:MCP_PORT) { `$env:MCP_PORT='18000' }
-if (-not `$env:MCP_PUBLIC_BASE_URL) { throw '.env에 MCP_PUBLIC_BASE_URL을 설정해 주세요.' }
+if (-not `$env:MCP_PORT) { `$env:MCP_PORT='18444' }
 if (-not `$env:MCP_OAUTH_APPROVAL_SECRET) { throw '.env에 MCP_OAUTH_APPROVAL_SECRET를 설정해 주세요.' }
 & '.\.venv\Scripts\python.exe' '.\mcp_server.py'
 "@
 
-$caddyCommand = @"
-Set-Location '$scriptDir'
-`$Host.UI.RawUI.WindowTitle = 'caddy'
-. '$envLoader'
-Import-ProjectEnv
-`$caddyHome = if (`$env:MCP_CADDY_HOME) { `$env:MCP_CADDY_HOME } else { `$env:USERPROFILE }
-`$caddyXdgHome = if (`$env:MCP_CADDY_XDG_HOME) { `$env:MCP_CADDY_XDG_HOME } else { `$env:APPDATA }
-if (-not `$env:MCP_PUBLIC_HOST) {
-    if (-not `$env:MCP_PUBLIC_BASE_URL) { throw '.env에 MCP_PUBLIC_HOST 또는 MCP_PUBLIC_BASE_URL을 설정해 주세요.' }
-    `$env:MCP_PUBLIC_HOST = ([Uri]`$env:MCP_PUBLIC_BASE_URL).Host
-}
-`$env:HOME = `$caddyHome
-`$env:USERPROFILE = `$caddyHome
-`$env:XDG_DATA_HOME = `$caddyXdgHome
-`$env:XDG_CONFIG_HOME = `$caddyXdgHome
-& '.\bin\caddy.exe' 'run'
-"@
-
 $serverProcess = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $serverCommand -PassThru
 $serverProcess.Id | Set-Content $serverPidFile
-
-Start-Sleep -Seconds 2
-
-$caddyProcess = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $caddyCommand -PassThru
-$caddyProcess.Id | Set-Content $caddyPidFile

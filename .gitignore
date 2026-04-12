@@ -12,7 +12,6 @@ notion_chroma_db/
 *.log
 ops/*.local.xml
 runtime/oauth_state.json
-caddy.exe
 
 .env
 .env.*

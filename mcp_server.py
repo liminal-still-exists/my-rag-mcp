@@ -25,12 +25,12 @@ from notion_store import format_record, get_store
 from oauth_provider import DEFAULT_SCOPE, LocalOAuthProvider
 
 HOST = os.environ.get("MCP_HOST", "127.0.0.1")
-PORT = int(os.environ.get("MCP_PORT", "8000"))
+PORT = int(os.environ.get("MCP_PORT", "18444"))
 TRANSPORT = os.environ.get("MCP_TRANSPORT", "streamable-http")
-PUBLIC_BASE_URL = os.environ.get("MCP_PUBLIC_BASE_URL", f"http://{HOST}:{PORT}")
+BASE_URL = f"http://{HOST}:{PORT}"
 APPROVAL_SECRET = os.environ.get("MCP_OAUTH_APPROVAL_SECRET", "change-me")
 MCP_PATH = "/myrag"
-PUBLIC_HOST = PUBLIC_BASE_URL.removeprefix("https://").removeprefix("http://").rstrip("/")
+BASE_HOST = BASE_URL.removeprefix("https://").removeprefix("http://").rstrip("/")
 
 
 def is_local_url(url: str) -> bool:
@@ -40,7 +40,7 @@ def is_local_url(url: str) -> bool:
 def validate_runtime_config() -> None:
     if TRANSPORT != "streamable-http":
         return
-    if not is_local_url(PUBLIC_BASE_URL) and APPROVAL_SECRET == "change-me":
+    if not is_local_url(BASE_URL) and APPROVAL_SECRET == "change-me":
         raise RuntimeError(
             "Set MCP_OAUTH_APPROVAL_SECRET before running streamable-http on a non-local URL."
         )
@@ -356,7 +356,7 @@ def patch_mcp_oauth_compat() -> None:
 patch_mcp_oauth_compat()
 
 oauth_provider = LocalOAuthProvider(
-    issuer_url=PUBLIC_BASE_URL,
+    issuer_url=BASE_URL,
     approval_secret=APPROVAL_SECRET,
 )
 
@@ -368,21 +368,21 @@ mcp = FastMCP(
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=[
-            PUBLIC_HOST,
+            BASE_HOST,
             "127.0.0.1:*",
             "localhost:*",
             "[::1]:*",
         ],
         allowed_origins=[
-            f"https://{PUBLIC_HOST}",
+            f"http://{BASE_HOST}",
             "http://127.0.0.1:*",
             "http://localhost:*",
             "http://[::1]:*",
         ],
     ),
     auth=AuthSettings(
-        issuer_url=PUBLIC_BASE_URL,
-        resource_server_url=f"{PUBLIC_BASE_URL.rstrip('/')}{MCP_PATH}",
+        issuer_url=BASE_URL,
+        resource_server_url=f"{BASE_URL.rstrip('/')}{MCP_PATH}",
         client_registration_options=ClientRegistrationOptions(
             enabled=True,
             default_scopes=[DEFAULT_SCOPE],
@@ -395,7 +395,7 @@ mcp = FastMCP(
 
 
 def build_oauth_metadata() -> dict:
-    base = PUBLIC_BASE_URL.rstrip("/")
+    base = BASE_URL.rstrip("/")
     return {
         "issuer": f"{base}/",
         "authorization_endpoint": f"{base}/authorize",
