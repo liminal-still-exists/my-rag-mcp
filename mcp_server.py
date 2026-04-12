@@ -17,7 +17,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAu
 from pydantic import AnyHttpUrl, ValidationError
 from starlette.routing import Route
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from mcp.server.auth.errors import stringify_pydantic_error
 from mcp.server.auth.json_response import PydanticJSONResponse
 
@@ -27,10 +27,14 @@ from oauth_provider import DEFAULT_SCOPE, LocalOAuthProvider
 HOST = os.environ.get("MCP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("MCP_PORT", "18444"))
 TRANSPORT = os.environ.get("MCP_TRANSPORT", "streamable-http")
-BASE_URL = f"http://{HOST}:{PORT}"
+LOCAL_BASE_URL = f"http://{HOST}:{PORT}"
+PUBLIC_BASE_URL = os.environ.get("MCP_PUBLIC_BASE_URL", LOCAL_BASE_URL)
 APPROVAL_SECRET = os.environ.get("MCP_OAUTH_APPROVAL_SECRET", "change-me")
 MCP_PATH = "/myrag"
-BASE_HOST = BASE_URL.removeprefix("https://").removeprefix("http://").rstrip("/")
+parsed_public_base_url = urlsplit(PUBLIC_BASE_URL)
+BASE_HOST = parsed_public_base_url.netloc or PUBLIC_BASE_URL.removeprefix("https://").removeprefix("http://").rstrip("/")
+BASE_ORIGIN = f"{parsed_public_base_url.scheme}://{parsed_public_base_url.netloc}" if parsed_public_base_url.scheme and parsed_public_base_url.netloc else PUBLIC_BASE_URL.rstrip("/")
+ISSUER_URL = f"{BASE_ORIGIN.rstrip('/')}{MCP_PATH}"
 
 
 def is_local_url(url: str) -> bool:
@@ -40,7 +44,7 @@ def is_local_url(url: str) -> bool:
 def validate_runtime_config() -> None:
     if TRANSPORT != "streamable-http":
         return
-    if not is_local_url(BASE_URL) and APPROVAL_SECRET == "change-me":
+    if not is_local_url(PUBLIC_BASE_URL) and APPROVAL_SECRET == "change-me":
         raise RuntimeError(
             "Set MCP_OAUTH_APPROVAL_SECRET before running streamable-http on a non-local URL."
         )
@@ -356,7 +360,7 @@ def patch_mcp_oauth_compat() -> None:
 patch_mcp_oauth_compat()
 
 oauth_provider = LocalOAuthProvider(
-    issuer_url=BASE_URL,
+    issuer_url=ISSUER_URL,
     approval_secret=APPROVAL_SECRET,
 )
 
@@ -374,15 +378,15 @@ mcp = FastMCP(
             "[::1]:*",
         ],
         allowed_origins=[
-            f"http://{BASE_HOST}",
+            BASE_ORIGIN,
             "http://127.0.0.1:*",
             "http://localhost:*",
             "http://[::1]:*",
         ],
     ),
     auth=AuthSettings(
-        issuer_url=BASE_URL,
-        resource_server_url=f"{BASE_URL.rstrip('/')}{MCP_PATH}",
+        issuer_url=ISSUER_URL,
+        resource_server_url=ISSUER_URL,
         client_registration_options=ClientRegistrationOptions(
             enabled=True,
             default_scopes=[DEFAULT_SCOPE],
@@ -395,7 +399,7 @@ mcp = FastMCP(
 
 
 def build_oauth_metadata() -> dict:
-    base = BASE_URL.rstrip("/")
+    base = ISSUER_URL.rstrip("/")
     return {
         "issuer": f"{base}/",
         "authorization_endpoint": f"{base}/authorize",
@@ -409,13 +413,102 @@ def build_oauth_metadata() -> dict:
     }
 
 
+def build_protected_resource_metadata() -> dict:
+    base = ISSUER_URL.rstrip("/")
+    return {
+        "resource": base,
+        "authorization_servers": [base],
+        "scopes_supported": [DEFAULT_SCOPE],
+    }
+
+
+async def call_asgi_endpoint(asgi_app, request: Request) -> Response:
+    status_code = 500
+    headers: list[tuple[bytes, bytes]] = []
+    body_chunks: list[bytes] = []
+
+    async def send(message):
+        nonlocal status_code, headers
+        if message["type"] == "http.response.start":
+            status_code = message["status"]
+            headers = message.get("headers", [])
+        elif message["type"] == "http.response.body":
+            body_chunks.append(message.get("body", b""))
+
+    await asgi_app(request.scope, request.receive, send)
+    response = Response(content=b"".join(body_chunks), status_code=status_code)
+    for key, value in headers:
+        response.headers.append(key.decode("latin-1"), value.decode("latin-1"))
+    return response
+
+
+def build_cors_preflight_response() -> JSONResponse:
+    return JSONResponse(
+        {},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+
+streamable_app = mcp.streamable_http_app()
+route_endpoints = {
+    route.path: route.endpoint
+    for route in streamable_app.routes
+    if getattr(route, "path", None)
+}
+
+
 @mcp.custom_route("/oauth/approve", methods=["GET", "POST"], include_in_schema=False)
 async def oauth_approve(request):
     return await oauth_provider.handle_approval(request)
 
 
+@mcp.custom_route(f"{MCP_PATH}/oauth/approve", methods=["GET", "POST"], include_in_schema=False)
+async def oauth_approve_prefixed(request):
+    return await oauth_provider.handle_approval(request)
+
+
+@mcp.custom_route(f"{MCP_PATH}/authorize", methods=["GET", "POST"], include_in_schema=False)
+async def authorize_prefixed(request):
+    return await route_endpoints["/authorize"](request)
+
+
+@mcp.custom_route(f"{MCP_PATH}/token", methods=["POST", "OPTIONS"], include_in_schema=False)
+async def token_prefixed(request):
+    if request.method == "OPTIONS":
+        return build_cors_preflight_response()
+    return await call_asgi_endpoint(route_endpoints["/token"], request)
+
+
+@mcp.custom_route(f"{MCP_PATH}/register", methods=["POST", "OPTIONS"], include_in_schema=False)
+async def register_prefixed(request):
+    if request.method == "OPTIONS":
+        return build_cors_preflight_response()
+    return await call_asgi_endpoint(route_endpoints["/register"], request)
+
+
 @mcp.custom_route("/.well-known/oauth-authorization-server/myrag", methods=["GET", "OPTIONS"], include_in_schema=False)
 async def oauth_authorization_server_path_metadata(request):
+    if request.method == "OPTIONS":
+        return JSONResponse(
+            {},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            },
+        )
+    return JSONResponse(
+        build_oauth_metadata(),
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
+@mcp.custom_route("/myrag/.well-known/oauth-authorization-server", methods=["GET", "OPTIONS"], include_in_schema=False)
+async def nested_oauth_authorization_server_metadata(request):
     if request.method == "OPTIONS":
         return JSONResponse(
             {},
@@ -444,6 +537,23 @@ async def openid_configuration_path_metadata(request):
         )
     return JSONResponse(
         build_oauth_metadata(),
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
+@mcp.custom_route("/myrag/.well-known/oauth-protected-resource", methods=["GET", "OPTIONS"], include_in_schema=False)
+async def nested_oauth_protected_resource_metadata(request):
+    if request.method == "OPTIONS":
+        return JSONResponse(
+            {},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            },
+        )
+    return JSONResponse(
+        build_protected_resource_metadata(),
         headers={"Access-Control-Allow-Origin": "*"},
     )
 

@@ -244,7 +244,7 @@ class LocalOAuthProvider(
             self.refresh_tokens.pop(token.token, None)
         self._persist_state()
 
-    def render_approval_page(self, request_id: str, error: str = "") -> HTMLResponse:
+    def render_approval_page(self, request_id: str, error: str = "", action_path: str = "/oauth/approve") -> HTMLResponse:
         escaped_error = html.escape(error)
         error_block = (
             f'<p style="color:#b00020;margin:0 0 16px 0;">{escaped_error}</p>'
@@ -301,7 +301,7 @@ class LocalOAuthProvider(
     <h1>OAuth 승인</h1>
     <p>Claude 웹 커넥터가 이 MCP 서버에 접근하려고 합니다. 주인님이 정한 승인 비밀번호를 입력하면 연결이 완료됩니다.</p>
     {error_block}
-    <form method="post" action="/oauth/approve">
+    <form method="post" action="{html.escape(action_path)}">
       <input type="hidden" name="request_id" value="{html.escape(request_id)}">
       <label for="approval_secret">승인 비밀번호</label>
       <input id="approval_secret" name="approval_secret" type="password" autocomplete="current-password" required>
@@ -319,7 +319,7 @@ class LocalOAuthProvider(
             request_id = request.query_params.get("request_id", "")
             if request_id not in self.pending_authorizations:
                 return HTMLResponse("Invalid or expired authorization request.", status_code=400)
-            return self.render_approval_page(request_id)
+            return self.render_approval_page(request_id, action_path=request.url.path)
 
         form = await request.form()
         request_id = str(form.get("request_id", ""))
@@ -329,7 +329,7 @@ class LocalOAuthProvider(
             return HTMLResponse("Invalid or expired authorization request.", status_code=400)
 
         if approval_secret != self.approval_secret:
-            return self.render_approval_page(request_id, error="비밀번호가 일치하지 않습니다.")
+            return self.render_approval_page(request_id, error="비밀번호가 일치하지 않습니다.", action_path=request.url.path)
 
         self.pending_authorizations.pop(request_id, None)
         code_value = secrets.token_urlsafe(32)
