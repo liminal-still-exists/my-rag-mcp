@@ -5,6 +5,7 @@ $projectRoot = Split-Path -Parent $scriptDir
 $serverScript = Join-Path $projectRoot "run_server.ps1"
 $logsDir = Join-Path $projectRoot "logs"
 $taskName = "\my_rag_mcp"
+$logRotateBytes = 1MB
 
 function Ensure-Admin {
     $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -48,6 +49,7 @@ function Install-NssmService {
     & $nssm set $Name AppStderr (Join-Path $logsDir "$Name.err.log") | Out-Null
     & $nssm set $Name AppRotateFiles 1 | Out-Null
     & $nssm set $Name AppRotateOnline 1 | Out-Null
+    & $nssm set $Name AppRotateBytes $logRotateBytes | Out-Null
 
     sc.exe config $Name start= delayed-auto | Out-Null
     if ($LASTEXITCODE -ne 0) {
