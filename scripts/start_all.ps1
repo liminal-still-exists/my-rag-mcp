@@ -1,11 +1,12 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Split-Path -Parent $scriptDir
 $envLoader = Join-Path $scriptDir "load_local_env.ps1"
 . $envLoader
 Import-ProjectEnv
-$runtimeDir = Join-Path $scriptDir "runtime"
-$logsDir = Join-Path $scriptDir "logs"
+$runtimeDir = Join-Path $projectRoot "runtime"
+$logsDir = Join-Path $projectRoot "logs"
 $serverPidFile = Join-Path $runtimeDir "mcp_server.pid"
 $serverLogFile = Join-Path $logsDir "mcp_server_start.log"
 
@@ -88,6 +89,7 @@ Set-Location '$scriptDir'
 Import-ProjectEnv
 if (-not `$env:MCP_PORT) { `$env:MCP_PORT='18444' }
 if (-not `$env:MCP_OAUTH_APPROVAL_SECRET) { throw '.env에 MCP_OAUTH_APPROVAL_SECRET를 설정해 주세요.' }
+Set-Location '$projectRoot'
 & '.\.venv\Scripts\python.exe' '.\mcp_server.py'
 "@
 

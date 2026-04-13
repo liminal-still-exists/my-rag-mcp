@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $scriptDir
+$projectRoot = Split-Path -Parent $scriptDir
+Set-Location $projectRoot
 
 function Test-Admin {
     $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -35,7 +36,7 @@ try {
         Write-Host "$serviceName 서비스가 없어 중지/재시작을 건너뜁니다."
     }
 
-    & "$scriptDir\.venv\Scripts\python.exe" "$scriptDir\embed.py"
+    & "$projectRoot\.venv\Scripts\python.exe" "$projectRoot\embed.py"
     if ($LASTEXITCODE -ne 0) {
         throw "embed.py 실행에 실패했습니다. 위 오류 메시지를 확인해 주세요."
     }

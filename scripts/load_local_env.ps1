@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 function Import-ProjectEnv {
     param(
-        [string]$EnvFile = (Join-Path $PSScriptRoot ".env")
+        [string]$EnvFile = (Join-Path (Split-Path -Parent $PSScriptRoot) ".env")
     )
 
     if (-not (Test-Path $EnvFile)) {

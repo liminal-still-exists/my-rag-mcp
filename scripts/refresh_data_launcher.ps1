@@ -4,7 +4,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $scriptDir
+$projectRoot = Split-Path -Parent $scriptDir
+Set-Location $projectRoot
 
 function Test-Admin {
     $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -32,7 +33,7 @@ if (-not (Test-Admin)) {
 }
 
 try {
-    & ".\refresh_data.ps1"
+    & "$scriptDir\refresh_data.ps1"
 }
 catch {
     Write-Host ""

@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptDir
-$serverScript = Join-Path $projectRoot "run_server.ps1"
+$serverScript = Join-Path $projectRoot "scripts\run_server.ps1"
 $logsDir = Join-Path $projectRoot "logs"
 $taskName = "\my_rag_mcp"
 $logRotateBytes = 1MB
