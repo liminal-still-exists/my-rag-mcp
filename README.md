@@ -165,7 +165,7 @@ sequenceDiagram
 | 구성 요소                | 구현 범위                                    |
 | -------------------- | ---------------------------------------- |
 | `embed.py`           | Notion 문서 정리·청킹, 페이지 계층 정보 연결, 임베딩 및 인덱싱 |
-| `BM25Index`          | 토큰화와 문서 통계를 이용한 BM25 점수 계산               |
-| `NotionStore`        | 벡터·BM25·하이브리드 검색, RRF 결합, 리랭킹, 메타데이터 조회  |
+| `BM25Index` 클래스<br>(`notion_store.py`) | 토큰화와 문서 통계를 이용한 BM25 점수 계산               |
+| `NotionStore` 클래스<br>(`notion_store.py`) | 벡터·BM25·하이브리드 검색, RRF 결합, 리랭킹, 메타데이터 조회  |
 | `mcp_server.py`      | 검색·조회 도구 노출 및 HTTP 기반 MCP 연결             |
-| `LocalOAuthProvider` | 자체 비밀번호 승인과 OAuth 인가 코드·토큰 발급 흐름 연결      |
+| `LocalOAuthProvider` 클래스<br>(`oauth_provider.py`) | 자체 비밀번호 승인과 OAuth 인가 코드·토큰 발급 흐름 연결      |
